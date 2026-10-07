@@ -1,0 +1,130 @@
+// # Watch Options Parser - Command Line Configuration
+//
+// Logline: Parses command-line arguments into structured runtime options for oowatch.
+//
+// Setup: Pure argument decoding module with default fallback configuration.
+//
+// Beats:
+//   1. Initialize default execution configuration (interval, count, theme).
+//   2. Parse command line flags and interval timing parameters.
+//   3. Assemble positional tokens into the unified execution command string.
+
+pub type WatchOpts = struct {
+    interval_sec: Int,
+    highlight_diffs: Bool,
+    no_title: Bool,
+    beep_on_err: Bool,
+    errexit: Bool,
+    max_count: Int,
+    theme_override: String,
+    help_mode: Bool,
+    version_mode: Bool,
+    mcp_mode: Bool,
+    command_str: String
+};
+
+pub fn watch_opts_default() -> WatchOpts {
+    return WatchOpts {
+        interval_sec: 2,
+        highlight_diffs: false,
+        no_title: false,
+        beep_on_err: false,
+        errexit: false,
+        max_count: 0,
+        theme_override: "",
+        help_mode: false,
+        version_mode: false,
+        mcp_mode: false,
+        command_str: ""
+    };
+}
+
+fn parse_int_digits(s: String) -> Int {
+    let n: Int = chars_len(s);
+    let mut val: Int = 0;
+    let mut i: Int = 0;
+    while i < n {
+        let b: Int = byte_at(char_at(s, i), 0);
+        if b >= 48 && b <= 57 {
+            val = val * 10 + (b - 48);
+        } else {
+            return val;
+        }
+        i = i + 1;
+    }
+    return val;
+}
+
+pub fn parse_watch_args(args: List[String]) -> WatchOpts {
+    let mut opts: WatchOpts = watch_opts_default();
+    let n: Int = list_len(args);
+    let mut i: Int = 0;
+    let mut passthrough_mode: Bool = false;
+
+    while i < n {
+        let arg: String = list_get(args, i);
+        if passthrough_mode {
+            if opts.command_str == "" {
+                opts.command_str = arg;
+            } else {
+                opts.command_str = opts.command_str + " " + arg;
+            }
+        } else if arg == "--" {
+            passthrough_mode = true;
+        } else if arg == "-h" || arg == "--help" {
+            opts.help_mode = true;
+            return opts;
+        } else if arg == "-v" || arg == "--version" {
+            opts.version_mode = true;
+            return opts;
+        } else if arg == "--mcp" {
+            opts.mcp_mode = true;
+        } else if arg == "-d" || arg == "--differences" {
+            opts.highlight_diffs = true;
+        } else if arg == "-t" || arg == "--no-title" {
+            opts.no_title = true;
+        } else if arg == "-b" || arg == "--beep" {
+            opts.beep_on_err = true;
+        } else if arg == "-e" || arg == "--errexit" {
+            opts.errexit = true;
+        } else if arg == "-1" || arg == "--once" {
+            opts.max_count = 1;
+        } else if arg == "-n" || arg == "--interval" {
+            i = i + 1;
+            if i < n {
+                let parsed: Int = parse_int_digits(list_get(args, i));
+                opts.interval_sec = if parsed > 0 { parsed } else { 2 };
+            }
+        } else if str_starts_with(arg, "-n") {
+            let parsed: Int = parse_int_digits(str_slice(arg, 2, chars_len(arg)));
+            opts.interval_sec = if parsed > 0 { parsed } else { 2 };
+        } else if str_starts_with(arg, "--interval=") {
+            let parsed: Int = parse_int_digits(str_slice(arg, 11, chars_len(arg)));
+            opts.interval_sec = if parsed > 0 { parsed } else { 2 };
+        } else if arg == "-c" || arg == "--count" {
+            i = i + 1;
+            if i < n {
+                opts.max_count = parse_int_digits(list_get(args, i));
+            }
+        } else if str_starts_with(arg, "-c") {
+            opts.max_count = parse_int_digits(str_slice(arg, 2, chars_len(arg)));
+        } else if str_starts_with(arg, "--count=") {
+            opts.max_count = parse_int_digits(str_slice(arg, 8, chars_len(arg)));
+        } else if arg == "--theme" {
+            i = i + 1;
+            if i < n {
+                opts.theme_override = list_get(args, i);
+            }
+        } else if str_starts_with(arg, "--theme=") {
+            opts.theme_override = str_slice(arg, 8, chars_len(arg));
+        } else if !str_starts_with(arg, "-") {
+            if opts.command_str == "" {
+                opts.command_str = arg;
+            } else {
+                opts.command_str = opts.command_str + " " + arg;
+            }
+        }
+        i = i + 1;
+    }
+    return opts;
+}

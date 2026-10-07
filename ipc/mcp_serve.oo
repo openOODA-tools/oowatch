@@ -1,0 +1,128 @@
+// # MCP Stdio Server - Continuous Command Delta Inspector
+//
+// Logline: Speaks Model Context Protocol over stdio for scheduled process polling and delta diffing.
+//
+// Setup: Bound to ProcessCap, TimeCap, and FsReadCap. Zero ambient authority.
+//
+// Beats:
+//   1. Handle initialize and notifications/initialized lifecycle handshakes.
+//   2. Advertise watch_poll, watch_diff, and watch_status tools with schemas.
+//   3. Dispatch capability-bounded process polling and delta calculation.
+
+import "std/fs/time/chrono.oo";
+import "runner/command_runner.oo";
+import "render/render_diff.oo";
+import "ipc/json_field.oo";
+
+fn build_error(id: String, code: Int, msg: String) -> String {
+    return "{\"jsonrpc\":\"2.0\",\"id\":" + id + ",\"error\":{\"code\":" + to_string(code) + ",\"message\":\"" + json_escape(msg) + "\"}}";
+}
+
+fn build_tool_result(id: String, text: String) -> String {
+    return "{\"jsonrpc\":\"2.0\",\"id\":" + id + ",\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"" + json_escape(text) + "\"}]}}";
+}
+
+fn handle_tool_call(proc: &ProcessCap, time: &TimeCap, id: String, req: String) -> String {
+    let params: String = json_field_raw(req, "params");
+    let tool_name: String = json_field_string(params, "name");
+    let args: String = json_field_raw(params, "arguments");
+
+    if tool_name == "watch_poll" {
+        let cmd: String = json_field_string(args, "command");
+        if chars_len(cmd) == 0 {
+            return build_error(id, -32602, "missing required parameter: command");
+        }
+        let res: Result[String, String] = run_command_output(proc, cmd);
+        if res.is_err() {
+            let err_msg: String = match res { Ok(_) => "", Err(e) => e };
+            return build_tool_result(id, "{\"command\":\"" + json_escape(cmd) + "\",\"success\":false,\"error\":\"" + json_escape(err_msg) + "\"}");
+        }
+        let stdout: String = match res { Ok(s) => s, Err(_) => "" };
+        let lines: List[String] = split_lines(stdout);
+        let out: String = "{\"command\":\"" + json_escape(cmd) + "\",\"success\":true,\"lines\":" + to_string(list_len(lines)) + ",\"stdout\":\"" + json_escape(stdout) + "\"}";
+        return build_tool_result(id, out);
+    }
+
+    if tool_name == "watch_diff" {
+        let cmd: String = json_field_string(args, "command");
+        if chars_len(cmd) == 0 {
+            return build_error(id, -32602, "missing required parameter: command");
+        }
+        let raw_int: String = json_field_raw(args, "interval_sec");
+        let interval_sec: Int = if chars_len(raw_int) > 0 { 1 } else { 1 };
+        let res1: Result[String, String] = run_command_output(proc, cmd);
+        let out1: String = match res1 { Ok(s) => s, Err(_) => "" };
+        chrono_sleep_ms(time, interval_sec * 1000);
+        let res2: Result[String, String] = run_command_output(proc, cmd);
+        let out2: String = match res2 { Ok(s) => s, Err(_) => "" };
+
+        let lines1: List[String] = split_lines(out1);
+        let lines2: List[String] = split_lines(out2);
+        let diff_detected: Bool = has_line_diff(lines1, lines2);
+
+        let out: String = "{\"command\":\"" + json_escape(cmd) + "\",\"has_diff\":" + (if diff_detected { "true" } else { "false" }) + ",\"first_output\":\"" + json_escape(out1) + "\",\"second_output\":\"" + json_escape(out2) + "\"}";
+        return build_tool_result(id, out);
+    }
+
+    if tool_name == "watch_status" {
+        let out: String = "{\"tool\":\"oowatch\",\"version\":\"0.1.0\",\"status\":\"ready\",\"capabilities\":[\"ProcessCap\",\"TimeCap\",\"FsReadCap\",\"EnvCap\"]}";
+        return build_tool_result(id, out);
+    }
+
+    return build_error(id, -32601, "unknown tool: " + tool_name);
+}
+
+fn handle_mcp_request(proc: &ProcessCap, time: &TimeCap, req: String) -> String {
+    let method: String = json_field_string(req, "method");
+    let raw_id: String = json_field_raw(req, "id");
+    let id: String = if chars_len(raw_id) == 0 { "null" } else { raw_id };
+
+    if method == "initialize" {
+        return "{\"jsonrpc\":\"2.0\",\"id\":" + id + ",\"result\":{\"protocolVersion\":\"2024-11-05\",\"capabilities\":{\"tools\":{}},\"serverInfo\":{\"name\":\"oowatch\",\"version\":\"0.1.0\"}}}";
+    }
+    if method == "notifications/initialized" {
+        return "";
+    }
+    if method == "tools/list" {
+        return "{\"jsonrpc\":\"2.0\",\"id\":" + id + ",\"result\":{\"tools\":[{\"name\":\"watch_poll\",\"description\":\"Execute command once and return stdout with line count\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"command\":{\"type\":\"string\"}},\"required\":[\"command\"]}},{\"name\":\"watch_diff\",\"description\":\"Execute command twice across interval and return delta diff\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"command\":{\"type\":\"string\"},\"interval_sec\":{\"type\":\"integer\"}},\"required\":[\"command\"]}},{\"name\":\"watch_status\",\"description\":\"Inspect oowatch engine state and capability tokens\",\"inputSchema\":{\"type\":\"object\",\"properties\":{}}}]}}";
+    }
+    if method == "tools/call" {
+        return handle_tool_call(proc, time, id, req);
+    }
+    if method == "shutdown" {
+        return "{\"jsonrpc\":\"2.0\",\"id\":" + id + ",\"result\":null}";
+    }
+    return build_error(id, -32601, "method not found: " + method);
+}
+
+pub fn run_mcp_server(proc: &ProcessCap, time: &TimeCap, fs: &FsReadCap) -> Int {
+    let mut buf: String = "";
+    let mut running: Bool = true;
+    while running {
+        let mut nl: Int = str_index_of(buf, "\n");
+        while nl >= 0 {
+            let line: String = str_trim(str_slice(buf, 0, nl));
+            buf = str_slice(buf, nl + 1, chars_len(buf));
+            if chars_len(line) > 0 {
+                let resp: String = handle_mcp_request(proc, time, line);
+                if chars_len(resp) > 0 {
+                    println(resp);
+                }
+            }
+            nl = str_index_of(buf, "\n");
+        }
+
+        let cr: Result[String, String] = oo_read_stdin_chunk(fs, 100);
+        if !cr.is_ok() {
+            running = false;
+        } else {
+            let chunk: String = match cr { Ok(s) => s, Err(_) => "" };
+            if chars_len(chunk) == 0 {
+                running = false;
+            } else {
+                buf = buf + chunk;
+            }
+        }
+    }
+    return 0;
+}

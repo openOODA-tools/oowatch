@@ -1,0 +1,18 @@
+// # oowatch Root Anchor - Facade
+//
+// Logline: Top-level domain aggregation and facade for oowatch subsystems.
+//
+// Setup: Re-exports runner, render, and ipc subdomains.
+//
+// Beats:
+//   1. Re-export runner interfaces.
+//   2. Re-export render interfaces.
+//   3. Re-export IPC interfaces.
+
+import "runner/anchor.oo";
+import "render/anchor.oo";
+import "ipc/anchor.oo";
+
+pub fn oowatch_version() -> String {
+    return "0.1.0";
+}

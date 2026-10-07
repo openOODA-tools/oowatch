@@ -1,0 +1,28 @@
+// # Render Anchor - Subdomain Facade
+//
+// Logline: Unified entry point and exports for oowatch render presentation.
+//
+// Setup: Re-exports theme resolution and diff rendering functions.
+//
+// Beats:
+//   1. Re-export theme hydration and ANSI codes.
+//   2. Re-export diff formatting and header composition.
+
+import "render/render_theme.oo";
+import "render/render_diff.oo";
+
+pub fn render_resolve_theme(fs: &FsReadCap, env: &EnvCap) -> String {
+    return resolve_watch_theme(fs, env);
+}
+
+pub fn render_format_header(cmd: String, interval_sec: Int, timestamp_str: String, theme: String) -> String {
+    return render_header(cmd, interval_sec, timestamp_str, theme);
+}
+
+pub fn render_diff_lines(prev_lines: List[String], curr_lines: List[String], highlight: Bool, theme: String) -> String {
+    return render_output_diff(prev_lines, curr_lines, highlight, theme);
+}
+
+pub fn render_has_diff(prev_lines: List[String], curr_lines: List[String]) -> Bool {
+    return has_line_diff(prev_lines, curr_lines);
+}

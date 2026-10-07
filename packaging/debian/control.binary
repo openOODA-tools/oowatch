@@ -1,0 +1,10 @@
+Package: oowatch
+Version: 0.1.0-1
+Section: utils
+Priority: optional
+Architecture: amd64
+Maintainer: openOODA-tools <ops@openooda.org>
+Description: Continuous command scheduler and delta watcher with ANSI diff highlighting
+ A sovereign continuous command scheduler and delta watcher written in pure
+ openOODA, featuring periodic execution, ANSI delta line diff highlighting
+ via oote themes, execution count bounds, and an MCP stdio server.

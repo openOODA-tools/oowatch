@@ -1,0 +1,11 @@
+dist/
+target/
+.ooda-cache/
+*.bin
+*.o
+*.a
+*.so
+*.pkg.tar.zst
+*.deb
+*.rpm
+*.sha256

@@ -1,0 +1,18 @@
+// # Runner Anchor - Subdomain Facade
+//
+// Logline: Unified entry point and exports for oowatch runner execution.
+//
+// Setup: Re-exports runner functions.
+//
+// Beats:
+//   1. Re-export command runner functions.
+
+import "runner/command_runner.oo";
+
+pub fn runner_run_command_output(proc: &ProcessCap, cmd_str: String) -> Result[String, String] {
+    return run_command_output(proc, cmd_str);
+}
+
+pub fn runner_split_lines(text: String) -> List[String] {
+    return split_lines(text);
+}

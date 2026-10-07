@@ -1,0 +1,89 @@
+// # Render Diff - Header and Output Delta Renderer
+//
+// Logline: Formats terminal header banners and highlights modified text deltas.
+//
+// Setup: Pure formatting module. Takes string lines, theme palette, and ANSI tokens.
+//
+// Beats:
+//   1. Build status header line with interval, command string, and timestamp.
+//   2. Compare line sequences to identify newly introduced or modified content.
+//   3. Highlight divergent line spans with theme-aware accent and inverse video.
+
+import "render/render_theme.oo";
+
+pub fn render_header(cmd: String, interval_sec: Int, timestamp_str: String, theme: String) -> String {
+    let hdr_color: String = theme_header_color(theme);
+    let border_color: String = theme_border_color(theme);
+    let reset: String = term_reset();
+
+    let prefix: String = "Every " + to_string(interval_sec) + ".0s: ";
+    let title: String = prefix + cmd;
+    let title_len: Int = chars_len(title);
+    let time_len: Int = chars_len(timestamp_str);
+
+    let mut spaces: String = "  ";
+    let target_width: Int = 80;
+    if title_len + time_len + 2 < target_width {
+        let pad_len: Int = target_width - (title_len + time_len);
+        let mut p: Int = 0;
+        let mut pad: String = "";
+        while p < pad_len {
+            pad = pad + " ";
+            p = p + 1;
+        }
+        spaces = pad;
+    }
+
+    let top_line: String = hdr_color + title + spaces + timestamp_str + reset + "\n";
+    let mut bar: String = "";
+    let mut b: Int = 0;
+    while b < target_width {
+        bar = bar + "─";
+        b = b + 1;
+    }
+    let sep_line: String = border_color + bar + reset + "\n";
+    return top_line + sep_line;
+}
+
+pub fn has_line_diff(prev_lines: List[String], curr_lines: List[String]) -> Bool {
+    let p_len: Int = list_len(prev_lines);
+    let c_len: Int = list_len(curr_lines);
+    if p_len != c_len {
+        return true;
+    }
+    let mut i: Int = 0;
+    while i < c_len {
+        let p_line: String = list_get(prev_lines, i);
+        let c_line: String = list_get(curr_lines, i);
+        if p_line != c_line {
+            return true;
+        }
+        i = i + 1;
+    }
+    return false;
+}
+
+pub fn render_output_diff(prev_lines: List[String], curr_lines: List[String], highlight_diffs: Bool, theme: String) -> String {
+    let p_len: Int = list_len(prev_lines);
+    let c_len: Int = list_len(curr_lines);
+    let diff_col: String = theme_diff_color(theme);
+    let reset: String = term_reset();
+
+    let mut result: String = "";
+    let mut i: Int = 0;
+    while i < c_len {
+        let line: String = list_get(curr_lines, i);
+        if highlight_diffs {
+            let is_diff: Bool = if i >= p_len { true } else { line != list_get(prev_lines, i) };
+            if is_diff {
+                result = result + diff_col + line + reset + "\n";
+            } else {
+                result = result + line + "\n";
+            }
+        } else {
+            result = result + line + "\n";
+        }
+        i = i + 1;
+    }
+    return result;
+}

@@ -1,0 +1,11 @@
+#!/usr/bin/make -f
+%:
+	dh $@
+
+override_dh_auto_build:
+	# binary-only release package
+
+override_dh_auto_install:
+	mkdir -p debian/oowatch/usr/bin
+	install -m 0755 dist/oowatch debian/oowatch/usr/bin/oowatch
+	install -m 0755 uninstall.sh debian/oowatch/usr/bin/oowatch-uninstall

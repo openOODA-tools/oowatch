@@ -1,0 +1,121 @@
+// # oowatch Entry Point - Continuous Command Scheduler & Delta Watcher
+//
+// Logline: Periodically executes host commands and visualizes terminal deltas with oote theming.
+//
+// Setup: Bound to ProcessCap, TimeCap, FsReadCap, and EnvCap. Zero ambient authority.
+//
+// Beats:
+//   1. Parse options, interval timings, and command arguments.
+//   2. Run command periodically and capture terminal stream outputs.
+//   3. Highlight divergent line changes and redraw terminal viewports.
+
+import "std/fs/time/chrono.oo";
+import "runner/command_runner.oo";
+import "render/render_theme.oo";
+import "render/render_diff.oo";
+import "ipc/watch_opts.oo";
+import "ipc/mcp_serve.oo";
+
+fn print_help() {
+    println("Usage: oowatch [OPTIONS] [--] <command>...\n\n" +
+        "Sovereign continuous command scheduler and delta watcher.\n\n" +
+        "Options:\n" +
+        "  -n, --interval <SECS>  Interval between updates in seconds (default: 2)\n" +
+        "  -d, --differences      Highlight changes between successive updates\n" +
+        "  -t, --no-title         Turn off header displaying interval, command, and timestamp\n" +
+        "  -b, --beep             Beep if command exits with a non-zero exit status\n" +
+        "  -e, --errexit          Freeze execution and exit on command error\n" +
+        "  -c, --count <NUM>      Run command NUM times and exit\n" +
+        "  -1, --once             Run command once and exit (equivalent to -c 1)\n" +
+        "      --theme=<NAME>     Override active palette (1982, dracula, nord, cyberpunk)\n" +
+        "      --mcp              Start Model Context Protocol stdio server\n" +
+        "  -h, --help             Display this help message and exit\n" +
+        "  -v, --version          Print version information and exit\n");
+}
+
+fn pad2(v: Int) -> String {
+    let s: String = to_string(v);
+    return if chars_len(s) < 2 { "0" + s } else { s };
+}
+
+fn format_clock(now_ms: Int) -> String {
+    let total_s: Int = now_ms / 1000;
+    let s: Int = total_s % 60;
+    let m: Int = (total_s / 60) % 60;
+    let h: Int = (total_s / 3600) % 24;
+    return pad2(h) + ":" + pad2(m) + ":" + pad2(s) + " UTC";
+}
+
+pub fn main(proc: &ProcessCap, time: &TimeCap, fs: &FsReadCap, env: &EnvCap, args: List[String]) -> Result[Int, String] {
+    let opts: WatchOpts = parse_watch_args(args);
+
+    if opts.help_mode {
+        print_help();
+        return Ok(0);
+    }
+    if opts.version_mode {
+        println("oowatch 0.1.0 (openOODA continuous delta watcher)");
+        return Ok(0);
+    }
+    if opts.mcp_mode {
+        run_mcp_server(proc, time, fs);
+        return Ok(0);
+    }
+
+    if chars_len(opts.command_str) == 0 {
+        println("oowatch: missing command operand\nTry 'oowatch --help' for more information.");
+        return Ok(1);
+    }
+
+    let theme: String = if opts.theme_override != "" { opts.theme_override } else { resolve_watch_theme(fs, env) };
+    let mut prev_lines: List[String] = list_new();
+    let mut count: Int = 0;
+    let mut running: Bool = true;
+
+    while running {
+        let cmd_res: Result[String, String] = run_command_output(proc, opts.command_str);
+        let is_err: Bool = cmd_res.is_err();
+
+        if is_err {
+            if opts.beep_on_err {
+                print(bytes_to_str(bytes_push(bytes_new(), 7)));
+            }
+            if opts.errexit {
+                let err_msg: String = match cmd_res { Ok(_) => "", Err(e) => e };
+                println("oowatch: command failed: " + err_msg);
+                return Ok(1);
+            }
+        }
+
+        let output_text: String = match cmd_res {
+            Ok(s) => s,
+            Err(e) => "Error executing command: " + e + "\n"
+        };
+        let curr_lines: List[String] = split_lines(output_text);
+
+        let clear_screen: String = term_clear_screen();
+        let now_val: Int = chrono_now_ms(time);
+        let time_str: String = format_clock(now_val);
+
+        let mut rendered: String = clear_screen;
+        if !opts.no_title {
+            let hdr: String = render_header(opts.command_str, opts.interval_sec, time_str, theme);
+            rendered = rendered + hdr;
+        }
+
+        let body: String = render_output_diff(prev_lines, curr_lines, opts.highlight_diffs, theme);
+        rendered = rendered + body;
+        print(rendered);
+
+        prev_lines = curr_lines;
+        count = count + 1;
+
+        if opts.max_count > 0 && count >= opts.max_count {
+            running = false;
+        } else {
+            chrono_sleep_ms(time, opts.interval_sec * 1000);
+        }
+    }
+
+    return Ok(0);
+}

@@ -1,0 +1,45 @@
+// # Runner Command Execution - Host Process Execution Engine
+//
+// Logline: Executes watched commands under ProcessCap and decomposes output streams.
+//
+// Setup: Bound to ProcessCap. Zero ambient authority.
+//
+// Beats:
+//   1. Execute host process string safely via process_exec.
+//   2. Normalize output streams and error outcomes.
+//   3. Decompose raw string payloads into discrete line records.
+
+import "std/fs/process/process.oo";
+
+pub fn run_command_output(proc: &ProcessCap, cmd_str: String) -> Result[String, String] {
+    if chars_len(cmd_str) == 0 {
+        return Err("empty command string");
+    }
+    return process_exec(proc, cmd_str);
+}
+
+pub fn split_lines(text: String) -> List[String] {
+    let mut lines: List[String] = list_new();
+    let total_chars: Int = chars_len(text);
+    if total_chars == 0 {
+        return lines;
+    }
+
+    let mut start_idx: Int = 0;
+    let mut i: Int = 0;
+    while i < total_chars {
+        let ch: String = char_at(text, i);
+        if ch == "\n" {
+            let line_slice: String = str_slice(text, start_idx, i);
+            lines = list_push(lines, line_slice);
+            start_idx = i + 1;
+        }
+        i = i + 1;
+    }
+
+    if start_idx < total_chars {
+        let final_slice: String = str_slice(text, start_idx, total_chars);
+        lines = list_push(lines, final_slice);
+    }
+    return lines;
+}

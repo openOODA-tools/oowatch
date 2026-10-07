@@ -1,0 +1,21 @@
+// # IPC Anchor - Subdomain Facade
+//
+// Logline: Unified entry point and exports for oowatch IPC and CLI options.
+//
+// Setup: Re-exports CLI argument parsing and MCP stdio server.
+//
+// Beats:
+//   1. Re-export CLI argument parser.
+//   2. Re-export MCP stdio server.
+
+import "ipc/watch_opts.oo";
+import "ipc/json_field.oo";
+import "ipc/mcp_serve.oo";
+
+pub fn ipc_parse_args(args: List[String]) -> WatchOpts {
+    return parse_watch_args(args);
+}
+
+pub fn ipc_run_mcp(proc: &ProcessCap, time: &TimeCap, fs: &FsReadCap) -> Int {
+    return run_mcp_server(proc, time, fs);
+}
