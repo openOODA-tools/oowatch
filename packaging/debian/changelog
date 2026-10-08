@@ -1,3 +1,9 @@
+oowatch (0.2.0-1) unstable; urgency=medium
+
+  * Sovereign release v0.2.0: interval parsing, iteration bounds, and MCP elevation.
+
+ -- openOODA-tools <ops@openooda.org>  Wed, 07 Oct 2026 20:00:00 -1000
+
 oowatch (0.1.0-1) unstable; urgency=medium
 
   * Initial sovereign release: continuous delta watcher, diff highlighting, and MCP stdio surface.

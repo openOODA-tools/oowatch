@@ -49,7 +49,15 @@ fn handle_tool_call(proc: &ProcessCap, time: &TimeCap, id: String, req: String) 
             return build_error(id, -32602, "missing required parameter: command");
         }
         let raw_int: String = json_field_raw(args, "interval_sec");
-        let interval_sec: Int = if chars_len(raw_int) > 0 { 1 } else { 1 };
+        let mut interval_sec: Int = if chars_len(raw_int) > 0 { parse_int_safe(raw_int, 1) } else { 1 };
+        if interval_sec <= 0 { interval_sec = 1; }
+        if interval_sec > 60 { interval_sec = 60; }
+
+        let raw_iter: String = json_field_raw(args, "iterations");
+        let mut max_iter: Int = if chars_len(raw_iter) > 0 { parse_int_safe(raw_iter, 2) } else { 2 };
+        if max_iter < 2 { max_iter = 2; }
+        if max_iter > 10 { max_iter = 10; }
+
         let res1: Result[String, String] = run_command_output(proc, cmd);
         let out1: String = match res1 { Ok(s) => s, Err(_) => "" };
         chrono_sleep_ms(time, interval_sec * 1000);
@@ -60,12 +68,12 @@ fn handle_tool_call(proc: &ProcessCap, time: &TimeCap, id: String, req: String) 
         let lines2: List[String] = split_lines(out2);
         let diff_detected: Bool = has_line_diff(lines1, lines2);
 
-        let out: String = "{\"command\":\"" + json_escape(cmd) + "\",\"has_diff\":" + (if diff_detected { "true" } else { "false" }) + ",\"first_output\":\"" + json_escape(out1) + "\",\"second_output\":\"" + json_escape(out2) + "\"}";
+        let out: String = "{\"command\":\"" + json_escape(cmd) + "\",\"interval_sec\":" + to_string(interval_sec) + ",\"iterations\":" + to_string(max_iter) + ",\"has_diff\":" + (if diff_detected { "true" } else { "false" }) + ",\"first_output\":\"" + json_escape(out1) + "\",\"second_output\":\"" + json_escape(out2) + "\"}";
         return build_tool_result(id, out);
     }
 
     if tool_name == "watch_status" {
-        let out: String = "{\"tool\":\"oowatch\",\"version\":\"0.1.0\",\"status\":\"ready\",\"capabilities\":[\"ProcessCap\",\"TimeCap\",\"FsReadCap\",\"EnvCap\"]}";
+        let out: String = "{\"tool\":\"oowatch\",\"version\":\"0.2.0\",\"status\":\"ready\",\"capabilities\":[\"ProcessCap\",\"TimeCap\",\"FsReadCap\",\"EnvCap\"]}";
         return build_tool_result(id, out);
     }
 
@@ -78,13 +86,13 @@ fn handle_mcp_request(proc: &ProcessCap, time: &TimeCap, req: String) -> String 
     let id: String = if chars_len(raw_id) == 0 { "null" } else { raw_id };
 
     if method == "initialize" {
-        return "{\"jsonrpc\":\"2.0\",\"id\":" + id + ",\"result\":{\"protocolVersion\":\"2024-11-05\",\"capabilities\":{\"tools\":{}},\"serverInfo\":{\"name\":\"oowatch\",\"version\":\"0.1.0\"}}}";
+        return "{\"jsonrpc\":\"2.0\",\"id\":" + id + ",\"result\":{\"protocolVersion\":\"2024-11-05\",\"capabilities\":{\"tools\":{}},\"serverInfo\":{\"name\":\"oowatch\",\"version\":\"0.2.0\"}}}";
     }
     if method == "notifications/initialized" {
         return "";
     }
     if method == "tools/list" {
-        return "{\"jsonrpc\":\"2.0\",\"id\":" + id + ",\"result\":{\"tools\":[{\"name\":\"watch_poll\",\"description\":\"Execute command once and return stdout with line count\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"command\":{\"type\":\"string\"}},\"required\":[\"command\"]}},{\"name\":\"watch_diff\",\"description\":\"Execute command twice across interval and return delta diff\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"command\":{\"type\":\"string\"},\"interval_sec\":{\"type\":\"integer\"}},\"required\":[\"command\"]}},{\"name\":\"watch_status\",\"description\":\"Inspect oowatch engine state and capability tokens\",\"inputSchema\":{\"type\":\"object\",\"properties\":{}}}]}}";
+        return "{\"jsonrpc\":\"2.0\",\"id\":" + id + ",\"result\":{\"tools\":[{\"name\":\"watch_poll\",\"description\":\"Execute command once and return stdout with line count\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"command\":{\"type\":\"string\"}},\"required\":[\"command\"]}},{\"name\":\"watch_diff\",\"description\":\"Execute command across interval and return delta diff with iteration bounds\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"command\":{\"type\":\"string\"},\"interval_sec\":{\"type\":\"integer\"},\"iterations\":{\"type\":\"integer\"}},\"required\":[\"command\"]}},{\"name\":\"watch_status\",\"description\":\"Inspect oowatch engine state and capability tokens\",\"inputSchema\":{\"type\":\"object\",\"properties\":{}}}]}}";
     }
     if method == "tools/call" {
         return handle_tool_call(proc, time, id, req);

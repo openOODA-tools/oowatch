@@ -54,7 +54,7 @@ pub fn main(proc: &ProcessCap, time: &TimeCap, fs: &FsReadCap, env: &EnvCap, arg
         return Ok(0);
     }
     if opts.version_mode {
-        println("oowatch 0.1.0 (openOODA continuous delta watcher)");
+        println("oowatch 0.2.0 (openOODA continuous delta watcher)");
         return Ok(0);
     }
     if opts.mcp_mode {

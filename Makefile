@@ -1,4 +1,4 @@
-# oowatch v0.1.0 Makefile
+# oowatch v0.2.0 Makefile
 
 OODA_COMPILER ?= $(firstword $(wildcard $(HOME)/.openooda/bin/oodac $(CURDIR)/../../openOODA/oodac/bin/oodac))
 OODACODEX ?= $(HOME)/.openooda/northstar.oot
@@ -9,7 +9,7 @@ PREFIX ?= /usr/local
 BINDIR ?= $(PREFIX)/bin
 
 SRC := $(wildcard *.oo) $(wildcard */*.oo)
-VERSION ?= 0.1.0
+VERSION ?= $(shell cat VERSION 2>/dev/null || echo 0.2.0)
 
 .PHONY: build check line-cap file-law academy density verify clean test package package-deb package-rpm package-arch install uninstall
 
@@ -104,7 +104,7 @@ test: $(BIN)
 	@echo "=== testing --help ==="
 	@./$(BIN) --help > /dev/null && echo "PASS: --help"
 	@echo "=== testing --version ==="
-	@./$(BIN) --version | grep -q "0.1.0" && echo "PASS: --version"
+	@./$(BIN) --version | grep -q "0.2.0" && echo "PASS: --version"
 	@echo "=== testing single execution -1 ==="
 	@./$(BIN) -1 echo oowatch_test_pass | grep -q "oowatch_test_pass" && echo "PASS: single shot execution"
 	@echo "=== testing count execution -c 2 ==="
@@ -115,8 +115,12 @@ test: $(BIN)
 	@printf '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}\n' | ./$(BIN) --mcp | grep -q "watch_poll" && echo "PASS: MCP tools/list"
 	@echo "=== testing MCP watch_poll ==="
 	@printf '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"watch_poll","arguments":{"command":"echo poll_ok"}}}\n' | ./$(BIN) --mcp | grep -q "poll_ok" && echo "PASS: MCP watch_poll"
+	@echo "=== testing MCP watch_diff ==="
+	@printf '{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"watch_diff","arguments":{"command":"echo diff_ok","interval_sec":1,"iterations":2}}}\n' | ./$(BIN) --mcp | grep -q "has_diff" && echo "PASS: MCP watch_diff"
 	@echo "=== testing MCP watch_status ==="
-	@printf '{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"watch_status","arguments":{}}}\n' | ./$(BIN) --mcp | grep -q "oowatch" && echo "PASS: MCP watch_status"
+	@printf '{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"watch_status","arguments":{}}}\n' | ./$(BIN) --mcp | grep -q "0.2.0" && echo "PASS: MCP watch_status"
+	@echo "=== testing determinism ==="
+	@./$(BIN) --version > /tmp/oowatch_v1 && ./$(BIN) --version > /tmp/oowatch_v2 && diff -u /tmp/oowatch_v1 /tmp/oowatch_v2 && rm -f /tmp/oowatch_v1 /tmp/oowatch_v2 && echo "PASS: determinism"
 	@echo "ALL TESTS PASSED"
 
 install: $(BIN)
